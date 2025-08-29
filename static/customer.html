@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Καρτέλα πελάτη</title>
+  <style>
+    :root { --b:#eee; --bg:#fff; --txt:#222; --muted:#777; --ok:#0a7a00; --bad:#b10000; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:16px;color:var(--txt)}
+    .header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+    h1{font-size:22px;margin:0}
+    a.back{color:#0b62d6;text-decoration:none}
+    .row{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+    .card{background:#fff;border:1px solid var(--b);border-radius:12px;padding:14px}
+    /* chart wrapper: κρατάμε το ύψος σταθερό και αφήνουμε Chart.js να προσαρμόσει το canvas */
+    .chartBox{position:relative;height:300px}
+    @media (max-width:1200px){ .row{grid-template-columns:1fr} .chartBox{height:260px} }
+    @media (max-width:900px){ .chartBox{height:220px} }
+
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+    .btn{border:1px solid #333;background:#f5f5f5;border-radius:8px;padding:8px 12px;cursor:pointer}
+    .btn.primary{background:#12b886;color:#fff;border-color:#12b886}
+    input[type="date"],input[type="text"]{padding:8px;border:1px solid var(--b);border-radius:8px}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid var(--b);padding:8px;vertical-align:top}
+    th{background:#fafafa;position:sticky;top:0}
+    td[contenteditable="true"]{background:#fffef5}
+    .muted{color:var(--muted);font-size:.9em}
+    .badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:.85em}
+    .badge.ok{background:#eaf7ee;color:var(--ok)}
+    .badge.bad{background:#ffe7e7;color:var(--bad)}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .field>label{display:block;font-size:.9em;color:#555;margin-bottom:4px}
+    .field>input,.field>textarea{width:100%;padding:8px;border:1px solid var(--b);border-radius:8px}
+    textarea{min-height:70px}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <!-- Αν το / σου δείχνει τους πελάτες, κράτα το /. Αλλιώς βάλε /static/customers.html -->
+    <a class="back" href="/">← Πίσω στους πελάτες</a>
+    <h1>Καρτέλα πελάτη</h1>
+    <span></span>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h3>ΦΠΑ / Μήνα</h3>
+      <div class="chartBox"><canvas id="vatChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Net + VAT (stacked) & Total</h3>
+      <div class="chartBox"><canvas id="totalChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <input id="files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" />
+      <button class="btn" id="btnUpload" type="button">Προσθήκη τιμολογίων</button>
+      <a class="btn primary" id="btnExport" href="#" download>Export Excel</a>
+      <span id="uploadInfo" class="muted"></span>
+    </div>
+
+    <div class="toolbar">
+      <input id="q" type="text" placeholder="Αναζήτηση" style="flex:1" />
+      <span>Από</span><input id="d1" type="date" />
+      <span>έως</span><input id="d2" type="date" />
+      <button class="btn" type="button" id="btnFilter">Φίλτρα</button>
+      <button class="btn" type="button" id="btnLinkSel">Σύνδεση επιλεγμένων</button>
+      <button class="btn" type="button" id="btnUnlinkSel">Αποσύνδεση επιλεγμένων</button>
+    </div>
+
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th style="width:28px"><input type="checkbox" id="chkAll"></th>
+          <th>ID</th>
+          <th>Ημ/νία</th>
+          <th>Καθ.</th>
+          <th>ΦΠΑ</th>
+          <th>Σύνολο</th>
+          <th>Συντ. ΦΠΑ</th>
+          <th>Σειρά</th>
+          <th>Αριθμός</th>
+          <th>Περιγραφή</th>
+          <th>Conf.</th>
+          <th>Διαγραφή</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="toolbar" style="justify-content:flex-start;margin-top:12px">
+      <button class="btn" id="btnEditCustomer" type="button">Επεξεργασία στοιχείων πελάτη</button>
+      <!-- ΔΙΑΓΡΑΦΗ ΠΕΛΑΤΗ αφαιρέθηκε: γίνεται μόνο από τη λίστα πελατών -->
+    </div>
+  </div>
+
+  <!-- Modal Επεξεργασία πελάτη -->
+  <div id="custModal" class="card" style="max-width:780px;margin-top:16px;display:none">
+    <h3>Στοιχεία πελάτη</h3>
+    <div class="grid2">
+      <div class="field"><label>Όνομα</label><input id="c_name"></div>
+      <div class="field"><label>ΑΦΜ</label><input id="c_afm"></div>
+      <div class="field"><label>Email</label><input id="c_email"></div>
+      <div class="field"><label>Τηλ</label><input id="c_phone"></div>
+      <div class="field" style="grid-column:1/-1"><label>Σημειώσεις</label><textarea id="c_notes"></textarea></div>
+    </div>
+    <div class="toolbar">
+      <button class="btn primary" type="button" id="btnSaveCustomer">Αποθήκευση</button>
+      <button class="btn" type="button" id="btnCancelCustomer">Άκυρο</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    const CID = new URLSearchParams(location.search).get('cid');
+    const CONF_BAD = 0.90;
+
+    const $ = s => document.querySelector(s);
+    const esc = s => (s ?? '').toString()
+      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+
+    let vatChart, totalChart, lastItems = [];
+
+    function badge(conf){
+      const v = +conf || 0;
+      const pct = Math.round(v*1000)/10;
+      const cls = v < CONF_BAD ? 'bad' : 'ok';
+      return `<span class="badge ${cls}">${pct}%</span>`;
+    }
+
+    async function j(url, opts){ const r = await fetch(url,opts); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+
+    async function refreshInvoices(preserveScroll=true){
+      const prev = window.scrollY;
+      const q = esc($('#q').value || '');
+      const d1 = $('#d1').value || '';
+      const d2 = $('#d2').value || '';
+      const res = await j(`/api/invoices?customer_id=${CID}&q=${encodeURIComponent(q)}&date_from=${d1}&date_to=${d2}&per_page=500`);
+      lastItems = res.invoices || [];
+      renderTable(lastItems);
+      renderCharts(lastItems);
+      if(preserveScroll) window.scrollTo({top:prev});
+    }
+
+    function renderTable(items){
+      const tb = $('#tbl tbody'); tb.innerHTML='';
+      for(const inv of items){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input type="checkbox" data-id="${inv.id}"></td>
+          <td>${inv.id}</td>
+          <td contenteditable="true" class="ed" data-id="${inv.id}" data-f="issue_date">${esc(inv.issue_date||'')}</td>
+          <td contenteditable="true" class="ed num" data-id="${inv.id}" data-f="net_amount">${inv.net_amount ?? ''}</td>
+          <td contenteditable="true" class="ed num" data-id="${inv.id}" data-f="vat_amount">${inv.vat_amount ?? ''}</td>
+          <td contenteditable="true" class="ed num" data-id="${inv.id}" data-f="total_amount">${inv.total_amount ?? ''}</td>
+          <td contenteditable="true" class="ed num" data-id="${inv.id}" data-f="vat_rate">${inv.vat_rate ?? ''}</td>
+          <td contenteditable="true" class="ed" data-id="${inv.id}" data-f="series">${esc(inv.series||'')}</td>
+          <td contenteditable="true" class="ed" data-id="${inv.id}" data-f="number">${esc(inv.number||'')}</td>
+          <td contenteditable="true" class="ed" data-id="${inv.id}" data-f="description">${esc(inv.description||'')}</td>
+          <td>${badge(inv.ocr_confidence)}</td>
+          <td><button type="button" class="btn danger small" data-del="${inv.id}">Διαγραφή</button></td>
+        `;
+        tb.appendChild(tr);
+      }
+    }
+
+    function renderCharts(items){
+      const by = {};
+      for(const r of items){
+        const m = (r.issue_date||'').slice(0,7) || 'Unknown';
+        const a = by[m] ?? (by[m] = {net:0, vat:0, total:0});
+        a.net += +r.net_amount || 0;
+        a.vat += +r.vat_amount || 0;
+        a.total += +r.total_amount || 0;
+      }
+      const labels = Object.keys(by).sort();
+      const dataNet = labels.map(k => +(by[k].net).toFixed(2));
+      const dataVat = labels.map(k => +(by[k].vat).toFixed(2));
+      const dataTot = labels.map(k => +(by[k].total).toFixed(2));
+
+      vatChart?.destroy();
+      vatChart = new Chart($('#vatChart'), {
+        type:'bar',
+        data:{ labels, datasets:[{label:'ΦΠΑ', data:dataVat}] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true}} }
+      });
+
+      totalChart?.destroy();
+      totalChart = new Chart($('#totalChart'), {
+        data:{
+          labels,
+          datasets:[
+            {type:'bar', label:'Καθ.', data:dataNet, stack:'s'},
+            {type:'bar', label:'ΦΠΑ', data:dataVat, stack:'s'},
+            {type:'line', label:'Σύνολο', data:dataTot}
+          ]
+        },
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          plugins:{legend:{display:true}},
+          scales:{x:{stacked:true}, y:{stacked:true}}
+        }
+      });
+    }
+
+    // events
+    $('#btnFilter').addEventListener('click', ()=> refreshInvoices());
+    $('#q').addEventListener('input', ()=> refreshInvoices());
+    window.addEventListener('resize', ()=> renderCharts(lastItems)); // responsive re-render
+
+    document.addEventListener('keydown', e=>{
+      if(e.target.matches('td.ed') && e.key==='Enter'){ e.preventDefault(); e.target.blur(); }
+    }, true);
+
+    document.addEventListener('blur', async (e)=>{
+      if(!e.target.matches('td.ed')) return;
+      const td = e.target;
+      const id = +td.dataset.id;
+      const field = td.dataset.f;
+      let value = td.innerText.trim();
+      if(td.classList.contains('num')) value = Number(value.replace(',','.')) || 0;
+      const prev = window.scrollY;
+      try{
+        await j(`/api/invoices/${id}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[field]: value})});
+        await refreshInvoices(false);
+        window.scrollTo({top:prev});
+      }catch(err){ alert('Σφάλμα αποθήκευσης: '+err); }
+    }, true);
+
+    document.addEventListener('click', async (e)=>{
+      const id = e.target?.dataset?.del;
+      if(!id) return;
+      e.preventDefault();
+      if(!confirm('Διαγραφή παραστατικού;')) return;
+      const prev = window.scrollY;
+      await fetch(`/api/invoices/${id}`, {method:'DELETE'});
+      await refreshInvoices(false);
+      window.scrollTo({top:prev});
+    });
+
+    $('#chkAll').addEventListener('change', e=>{
+      document.querySelectorAll('#tbl tbody input[type=checkbox]').forEach(c=>c.checked=e.target.checked);
+    });
+
+    async function assignSel(customer_id){
+      const ids=[...document.querySelectorAll('#tbl tbody input[type=checkbox]:checked')].map(c=>+c.dataset.id);
+      if(!ids.length) return alert('Διάλεξε γραμμές.');
+      await j('/api/invoices/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids, customer_id})});
+      refreshInvoices();
+    }
+    $('#btnLinkSel').addEventListener('click', ()=> assignSel(CID));
+    $('#btnUnlinkSel').addEventListener('click', ()=> assignSel(null));
+
+    $('#btnUpload').addEventListener('click', async ()=>{
+      const fs = $('#files').files;
+      if(!fs.length) return alert('Διάλεξε αρχεία');
+      const fd = new FormData();
+      for(const f of fs) fd.append('files', f);
+      $('#uploadInfo').textContent = 'Ανέβασμα...';
+      try{
+        const r = await j(`/api/customers/${CID}/upload`, {method:'POST', body:fd});
+        $('#uploadInfo').textContent = `OK αρχεία: ${r.count}`;
+        refreshInvoices();
+      }catch(err){ $('#uploadInfo').textContent = 'Σφάλμα ανεβάσματος: '+err; }
+    });
+
+    $('#btnExport').addEventListener('click', e=>{ e.preventDefault(); location.href = `/api/customers/${CID}/export/xlsx`; });
+
+    async function loadCustomerForm(){
+      const r = await j(`/api/customers/${CID}`);
+      $('#c_name').value  = r.customer.name || '';
+      $('#c_afm').value   = r.customer.afm || '';
+      $('#c_email').value = r.customer.email || '';
+      $('#c_phone').value = r.customer.phone || '';
+      $('#c_notes').value = r.customer.notes || '';
+    }
+    $('#btnEditCustomer').addEventListener('click', async ()=>{
+      await loadCustomerForm();
+      $('#custModal').style.display='block';
+      window.scrollTo({top:document.body.scrollHeight});
+    });
+    $('#btnCancelCustomer').addEventListener('click', ()=> $('#custModal').style.display='none');
+    $('#btnSaveCustomer').addEventListener('click', async ()=>{
+      const d = {
+        name: $('#c_name').value.trim(),
+        afm: $('#c_afm').value.trim(),
+        email: $('#c_email').value.trim(),
+        phone: $('#c_phone').value.trim(),
+        notes: $('#c_notes').value.trim(),
+      };
+      await j(`/api/customers/${CID}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d)});
+      $('#custModal').style.display='none';
+      alert('Αποθηκεύτηκε.');
+    });
+
+    // init
+    refreshInvoices();
+  </script>
+</body>
+</html>

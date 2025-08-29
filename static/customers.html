@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Πελάτες</title>
+  <style>
+    :root { --b:#eee; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:16px}
+    h1{font-size:22px;margin:0 0 12px}
+    .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+    .btn{border:1px solid #333;background:#f5f5f5;border-radius:8px;padding:8px 12px;cursor:pointer}
+    .btn.primary{background:#12b886;color:#fff;border-color:#12b886}
+    .btn.danger{background:#ffe8e8;border-color:#ffb3b3;color:#b10000}
+    input[type=text]{padding:8px;border:1px solid var(--b);border-radius:8px;flex:1}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid var(--b);padding:8px}
+    th{background:#fafafa}
+    a{color:#0b62d6;text-decoration:none}
+    .modal{display:none;margin-top:16px;border:1px solid var(--b);border-radius:12px;padding:14px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .field>label{display:block;font-size:.9em;color:#555;margin-bottom:4px}
+    .field>input,.field>textarea{width:100%;padding:8px;border:1px solid var(--b);border-radius:8px}
+    textarea{min-height:70px}
+  </style>
+</head>
+<body>
+  <h1>Πελάτες</h1>
+
+  <div class="toolbar">
+    <input id="q" type="text" placeholder="Αναζήτηση (όνομα/ΑΦΜ)" />
+    <button class="btn" id="btnSearch" type="button">Αναζήτηση</button>
+    <button class="btn primary" id="btnNew" type="button">Νέος πελάτης</button>
+  </div>
+
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th style="width:80px">ID</th>
+        <th>Όνομα</th>
+        <th>ΑΦΜ</th>
+        <th>Email</th>
+        <th>Τηλ</th>
+        <th>Τιμολόγια</th>
+        <th>Σύνολο</th>
+        <th>Ενέργειες</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- Modal new/edit -->
+  <div id="modal" class="modal">
+    <h3 id="m_title">Νέος πελάτης</h3>
+    <div class="grid2">
+      <div class="field"><label>Όνομα</label><input id="m_name"></div>
+      <div class="field"><label>ΑΦΜ</label><input id="m_afm"></div>
+      <div class="field"><label>Email</label><input id="m_email"></div>
+      <div class="field"><label>Τηλ</label><input id="m_phone"></div>
+      <div class="field" style="grid-column:1/-1"><label>Σημειώσεις</label><textarea id="m_notes"></textarea></div>
+    </div>
+    <div class="toolbar">
+      <button class="btn primary" id="m_save" type="button">Αποθήκευση</button>
+      <button class="btn" id="m_cancel" type="button">Άκυρο</button>
+    </div>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    async function j(url, opts){ const r = await fetch(url,opts); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+
+    let EDIT_ID = null;
+
+    async function refresh(){
+      const q = $('#q').value || '';
+      const r = await j(`/api/customers?q=${encodeURIComponent(q)}&per_page=200`);
+      const tb = $('#tbl tbody'); tb.innerHTML='';
+      for(const c of r.customers){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${c.id}</td>
+          <td><a href="/static/customer.html?cid=${c.id}">${c.name || '(χωρίς όνομα)'}</a></td>
+          <td>${c.afm||''}</td>
+          <td>${c.email||''}</td>
+          <td>${c.phone||''}</td>
+          <td style="text-align:center">${c.inv_count||0}</td>
+          <td>${(c.sum_total||0).toFixed(2)}</td>
+          <td>
+            <button class="btn" data-edit="${c.id}">Επεξεργασία</button>
+            <button class="btn danger" data-del="${c.id}">Διαγραφή</button>
+          </td>
+        `;
+        tb.appendChild(tr);
+      }
+    }
+
+    $('#btnSearch').addEventListener('click', refresh);
+    $('#q').addEventListener('input', ()=> refresh());
+
+    // open new
+    $('#btnNew').addEventListener('click', ()=>{
+      EDIT_ID = null;
+      $('#m_title').textContent = 'Νέος πελάτης';
+      $('#m_name').value=''; $('#m_afm').value=''; $('#m_email').value=''; $('#m_phone').value=''; $('#m_notes').value='';
+      $('#modal').style.display='block';
+      window.scrollTo({top:document.body.scrollHeight});
+    });
+
+    // actions
+    document.addEventListener('click', async e=>{
+      const idEdit = e.target?.dataset?.edit;
+      const idDel  = e.target?.dataset?.del;
+      if(idEdit){
+        const r = await j(`/api/customers/${idEdit}`);
+        EDIT_ID = r.customer.id;
+        $('#m_title').textContent = `Επεξεργασία: ${r.customer.name||r.customer.id}`;
+        $('#m_name').value=r.customer.name||'';
+        $('#m_afm').value=r.customer.afm||'';
+        $('#m_email').value=r.customer.email||'';
+        $('#m_phone').value=r.customer.phone||'';
+        $('#m_notes').value=r.customer.notes||'';
+        $('#modal').style.display='block';
+        window.scrollTo({top:document.body.scrollHeight});
+      }
+      if(idDel){
+        if(!confirm('Διαγραφή πελάτη; Τα παραστατικά θα αποσυνδεθούν.')) return;
+        await fetch(`/api/customers/${idDel}?cascade=false`, {method:'DELETE'});
+        refresh();
+      }
+    });
+
+    // modal buttons
+    $('#m_cancel').addEventListener('click', ()=> $('#modal').style.display='none');
+    $('#m_save').addEventListener('click', async ()=>{
+      const d={name:$('#m_name').value.trim(),afm:$('#m_afm').value.trim(),email:$('#m_email').value.trim(),phone:$('#m_phone').value.trim(),notes:$('#m_notes').value.trim()};
+      if(EDIT_ID==null){
+        await j('/api/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+      }else{
+        await j(`/api/customers/${EDIT_ID}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+      }
+      $('#modal').style.display='none';
+      refresh();
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
