@@ -3,6 +3,6 @@ fastapi==0.112.0
 uvicorn[standard]==0.30.5
 google-cloud-vision==3.7.2
 google-cloud-documentai==2.27.0
-PyMuPDF==1.24.9
+PyMuPDF==1.26.4
 openpyxl==3.1.5
 python-multipart>=0.0.7
